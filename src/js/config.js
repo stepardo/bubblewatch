@@ -11,6 +11,12 @@ module.exports = [
                 "messageKey": "ConfigInverted",
                 "label": "Inverted mode",
                 "defaultValue": false
+            },
+            {
+                "type": "toggle",
+                "messageKey": "ConfigShowBubbles",
+                "label": "Show bubbles",
+                "defaultValue": true
             }
         ]
     },

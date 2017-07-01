@@ -1,39 +1,40 @@
 {
-  "version": "1.3.0",
-  "author": "Steffen Liebergeld",
-  "private": true,
-  "dependencies": {
-    "pebble-clay": "^1.0.4"
-  },
-  "keywords": [
-    "pebble-app"
-  ],
-  "pebble": {
-    "sdkVersion": "3",
-    "resources": {
-      "media": []
+    "version": "1.3.0",
+    "author": "Steffen Liebergeld",
+    "private": true,
+    "dependencies": {
+        "pebble-clay": "^1.0.4"
     },
-    "enableMultiJS": true,
-    "displayName": "Planetary Clock",
-    "projectType": "native",
-    "uuid": "f613cbb0-4626-44e7-92d3-cc1a0c67051e",
-    "capabilities": [
-        "configurable",
-        "health"
+    "keywords": [
+        "pebble-app"
     ],
-    "messageKeys": [
-      "ConfigInverted"
-    ],
-    "watchapp": {
-      "onlyShownOnCommunication": false,
-      "hiddenApp": false,
-      "watchface": true
+    "pebble": {
+        "sdkVersion": "3",
+        "resources": {
+            "media": []
+        },
+        "enableMultiJS": true,
+        "displayName": "Planetary Clock",
+        "projectType": "native",
+        "uuid": "f613cbb0-4626-44e7-92d3-cc1a0c67051e",
+        "capabilities": [
+            "configurable",
+            "health"
+        ],
+        "messageKeys": [
+            "ConfigInverted",
+            "ConfigShowBubbles"
+        ],
+        "watchapp": {
+            "onlyShownOnCommunication": false,
+            "hiddenApp": false,
+            "watchface": true
+        },
+        "targetPlatforms": [
+            "aplite",
+            "basalt",
+            "diorite"
+        ]
     },
-    "targetPlatforms": [
-      "aplite",
-      "basalt",
-      "diorite"
-    ]
-  },
-  "name": "Planetary Clock"
+    "name": "Planetary Clock"
 }

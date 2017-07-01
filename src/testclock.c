@@ -7,6 +7,7 @@
 typedef struct ClayConfig
 {
   bool inverted;
+  bool show_bubbles;
 } __attribute__((__packed__)) ClayConfig;
 
 ClayConfig settings;
@@ -111,53 +112,56 @@ void inner_clock_text_layer_update_callback(Layer *me, GContext *ctx)
 
   graphics_context_set_antialiased(ctx, false);
 
-  graphics_context_set_stroke_width(ctx, 1);
-  graphics_draw_circle(ctx, center, 8);
-  graphics_context_set_fill_color(ctx, BACKGROUND);
-  graphics_fill_circle(ctx, center, 7);
 
-  char buf[3];
-  snprintf(buf, 3, "%0d", hour);
-  buf[2] = '\0';
-  graphics_draw_text(ctx,
-                     buf,
-                     fonts_get_system_font(FONT_KEY_GOTHIC_14),
-                     GRect(center.x - 9, center.y - 9, 18, 18),
-                     GTextOverflowModeFill, GTextAlignmentCenter, 0);
+  if (settings.show_bubbles)
+    {
+      graphics_context_set_stroke_width(ctx, 1);
+      graphics_draw_circle(ctx, center, 8);
+      graphics_context_set_fill_color(ctx, BACKGROUND);
+      graphics_fill_circle(ctx, center, 7);
 
-  int32_t length = 22;
-  int32_t minute_a_y = (-cos_lookup(minute_angle) * length / TRIG_MAX_RATIO) + center.y;
-  int32_t minute_a_x = (sin_lookup(minute_angle) * length / TRIG_MAX_RATIO) + center.x;
-  graphics_context_set_stroke_width(ctx, 1);
-  graphics_draw_circle(ctx, GPoint(minute_a_x, minute_a_y), 8);
-  graphics_context_set_fill_color(ctx, BACKGROUND);
-  graphics_fill_circle(ctx, GPoint(minute_a_x, minute_a_y), 7);
+      char buf[3];
+      snprintf(buf, 3, "%0d", hour);
+      buf[2] = '\0';
+      graphics_draw_text(ctx,
+                         buf,
+                         fonts_get_system_font(FONT_KEY_GOTHIC_14),
+                         GRect(center.x - 9, center.y - 9, 18, 18),
+                         GTextOverflowModeFill, GTextAlignmentCenter, 0);
 
-  snprintf(buf, 3, "%0d", minute);
-  buf[2] = '\0';
-  graphics_draw_text(ctx,
-                     buf,
-                     fonts_get_system_font(FONT_KEY_GOTHIC_14),
-                     GRect(minute_a_x - 9, minute_a_y - 9, 18, 18),
-                     GTextOverflowModeFill, GTextAlignmentCenter, 0);
+      int32_t length = 22;
+      int32_t minute_a_y = (-cos_lookup(minute_angle) * length / TRIG_MAX_RATIO) + center.y;
+      int32_t minute_a_x = (sin_lookup(minute_angle) * length / TRIG_MAX_RATIO) + center.x;
+      graphics_context_set_stroke_width(ctx, 1);
+      graphics_draw_circle(ctx, GPoint(minute_a_x, minute_a_y), 8);
+      graphics_context_set_fill_color(ctx, BACKGROUND);
+      graphics_fill_circle(ctx, GPoint(minute_a_x, minute_a_y), 7);
 
-  length = 44;//min(bounds.size.w, bounds.size.h)/2 - 14;
-  int32_t second_a_y = (-cos_lookup(second_angle) * length / TRIG_MAX_RATIO) + center.y;
-  int32_t second_a_x = (sin_lookup(second_angle) * length / TRIG_MAX_RATIO) + center.x;
+      snprintf(buf, 3, "%0d", minute);
+      buf[2] = '\0';
+      graphics_draw_text(ctx,
+                         buf,
+                         fonts_get_system_font(FONT_KEY_GOTHIC_14),
+                         GRect(minute_a_x - 9, minute_a_y - 9, 18, 18),
+                         GTextOverflowModeFill, GTextAlignmentCenter, 0);
 
-  graphics_context_set_stroke_width(ctx, 1);
-  graphics_draw_circle(ctx, GPoint(second_a_x, second_a_y), 8);
-  graphics_context_set_fill_color(ctx, BACKGROUND);
-  graphics_fill_circle(ctx, GPoint(second_a_x, second_a_y), 7);
+      length = 44;//min(bounds.size.w, bounds.size.h)/2 - 14;
+      int32_t second_a_y = (-cos_lookup(second_angle) * length / TRIG_MAX_RATIO) + center.y;
+      int32_t second_a_x = (sin_lookup(second_angle) * length / TRIG_MAX_RATIO) + center.x;
 
-  snprintf(buf, 3, "%0d", second);
-  buf[2] = '\0';
-  graphics_draw_text(ctx,
-                     buf,
-                     fonts_get_system_font(FONT_KEY_GOTHIC_14),
-                     GRect(second_a_x - 9, second_a_y - 9, 18, 18),
-                     GTextOverflowModeFill, GTextAlignmentCenter, 0);
+      graphics_context_set_stroke_width(ctx, 1);
+      graphics_draw_circle(ctx, GPoint(second_a_x, second_a_y), 8);
+      graphics_context_set_fill_color(ctx, BACKGROUND);
+      graphics_fill_circle(ctx, GPoint(second_a_x, second_a_y), 7);
 
+      snprintf(buf, 3, "%0d", second);
+      buf[2] = '\0';
+      graphics_draw_text(ctx,
+                         buf,
+                         fonts_get_system_font(FONT_KEY_GOTHIC_14),
+                         GRect(second_a_x - 9, second_a_y - 9, 18, 18),
+                         GTextOverflowModeFill, GTextAlignmentCenter, 0);
+    }
 #if defined(PBL_HEALTH)
   if (heart_rate != -1)
     {
@@ -296,6 +300,7 @@ static void prv_window_unload(Window *window) {
 static void load_settings()
 {
   settings.inverted = false;
+  settings.show_bubbles = true;
   persist_read_data(SETTINGS_KEY, &settings, sizeof(settings));
 }
 
@@ -311,6 +316,10 @@ static void app_message_received(DictionaryIterator *it, void *context)
   Tuple *t = dict_find(it, MESSAGE_KEY_ConfigInverted);
   if (t)
     settings.inverted = t->value->int32 == 1;
+
+  t = dict_find(it, MESSAGE_KEY_ConfigShowBubbles);
+  if (t)
+    settings.show_bubbles = t->value->int32 == 1;
 
   save_settings();
 }
