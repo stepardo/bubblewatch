@@ -1,7 +1,7 @@
 module.exports = [
     {
         "type": "heading",
-        "defaultValue": "Planetary Clock"
+        "defaultValue": "Bubble Watch"
     },
     {
         "type": "section",

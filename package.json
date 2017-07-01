@@ -1,6 +1,6 @@
 {
     "version": "1.4.0",
-    "author": "Steffen Liebergeld",
+    "author": "stepardo",
     "private": true,
     "dependencies": {
         "pebble-clay": "^1.0.4"
@@ -14,7 +14,7 @@
             "media": []
         },
         "enableMultiJS": true,
-        "displayName": "Planetary Clock",
+        "displayName": "Bubble Watch",
         "projectType": "native",
         "uuid": "f613cbb0-4626-44e7-92d3-cc1a0c67051e",
         "capabilities": [
@@ -39,5 +39,5 @@
             "diorite"
         ]
     },
-    "name": "Planetary Clock"
+    "name": "Bubble Watch"
 }
