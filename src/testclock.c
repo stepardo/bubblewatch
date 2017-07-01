@@ -6,11 +6,20 @@
 
 typedef struct ClayConfig
 {
-  bool inverted;
+  bool show_seconds;
+  GColor foreground_color;
+  GColor background_color;
   bool show_bubbles;
+  bool vibrate_on_disconnect;
 } __attribute__((__packed__)) ClayConfig;
 
 ClayConfig settings;
+
+#define FOREGROUND \
+  settings.foreground_color
+
+#define BACKGROUND \
+  settings.background_color
 
 static Window *s_window = NULL;
 static Layer *digital_layer = NULL;
@@ -21,19 +30,101 @@ static unsigned hour = 0, minute = 0, second = 0;
 static char digital_layer_text_buffer[22];
 static short initialized = 0;
 static int battery_level = 0;
-static HealthValue heart_rate = -1;
+#if defined(PBL_HEALTH)
+static HealthValue heart_rate = 0;
+#endif
+static bool bluetooth_connected = false;
 
+static void draw_bluetooth_icon(GContext *ctx, GRect bounds)
+{
+  graphics_draw_line(ctx,
+                     GPoint(bounds.origin.x + bounds.size.w/2, bounds.origin.y),
+                     GPoint(bounds.origin.x + bounds.size.w/2, bounds.origin.y + bounds.size.h));
+  graphics_draw_line(ctx,
+                     GPoint(bounds.origin.x + bounds.size.w/2,   bounds.origin.y),
+                     GPoint(bounds.origin.x + bounds.size.w/4*3, bounds.origin.y + bounds.size.h/4));
+  graphics_draw_line(ctx,
+                     GPoint(bounds.origin.x + bounds.size.w/4*3, bounds.origin.y + bounds.size.h/4),
+                     GPoint(bounds.origin.x + bounds.size.w/4,   bounds.origin.y + bounds.size.h/4*3));
+  graphics_draw_line(ctx,
+                     GPoint(bounds.origin.x + bounds.size.w/2,   bounds.origin.y + bounds.size.h),
+                     GPoint(bounds.origin.x + bounds.size.w/4*3, bounds.origin.y + bounds.size.h/4*3));
+  graphics_draw_line(ctx,
+                     GPoint(bounds.origin.x + bounds.size.w/4*3, bounds.origin.y + bounds.size.h/4*3),
+                     GPoint(bounds.origin.x + bounds.size.w/4,   bounds.origin.y + bounds.size.h/4));
+
+  // draw exclamation mark
+
+  graphics_draw_line(ctx,
+                     GPoint(bounds.origin.x, bounds.origin.y + 1),
+                     GPoint(bounds.origin.x, bounds.origin.y + bounds.size.h - 3));
+  graphics_draw_pixel(ctx,
+                      GPoint(bounds.origin.x, bounds.origin.y + bounds.size.h - 1));
+}
+
+static void draw_bluetooth(GContext *ctx, GRect bounds)
+{
+  graphics_context_set_stroke_color(ctx, BACKGROUND);
+  graphics_context_set_stroke_width(ctx, 3);
+
+  draw_bluetooth_icon(ctx, bounds);
+
+  graphics_context_set_stroke_color(ctx, FOREGROUND);
+  graphics_context_set_stroke_width(ctx, 1);
+
+  draw_bluetooth_icon(ctx, bounds);
+}
+
+static void draw_battery(GContext *ctx, GRect bounds)
+{
+  graphics_context_set_stroke_color(ctx, BACKGROUND);
+  graphics_context_set_fill_color(ctx, BACKGROUND);
+  graphics_context_set_stroke_width(ctx, 1);
+
+  graphics_fill_rect(ctx, GRect(bounds.origin.x + 2, bounds.origin.y,
+                                bounds.size.w - 2, bounds.size.h),
+                     0,
+                     GCornersLeft);
+
+  // battery nubble
+  graphics_fill_rect(ctx,
+                     GRect(bounds.origin.x, bounds.origin.y + bounds.size.h/3,
+                           3, bounds.size.h/3*2),
+                     0,
+                     GCornersLeft);
+
+  graphics_context_set_fill_color(ctx, FOREGROUND);
+  graphics_fill_rect(ctx,
+                     GRect(bounds.origin.x + 1, bounds.origin.y + 1 + (bounds.size.h - 2)/3,
+                           2, (bounds.size.h - 2)/3*2),
+                     0,
+                     GCornersLeft);
+
+  // battery body
+  graphics_context_set_stroke_color(ctx, FOREGROUND);
+  graphics_draw_round_rect(ctx, GRect(bounds.origin.x + 3, bounds.origin.y + 1,
+                                      bounds.size.w - 3, bounds.size.h - 2), 0);
+
+  // battery fill stand
+  graphics_fill_rect(ctx,
+                     GRect(bounds.origin.x + 3 + bounds.size.w - battery_level/10 * 2, bounds.origin.y + 1,
+                           battery_level/10 * 2, bounds.size.h - 2),
+                     0,
+                     GCornersRight);
+}
+
+static void bluetooth_callback(bool connected)
+{
+  bluetooth_connected = connected;
+
+  if (settings.vibrate_on_disconnect && !connected)
+    vibes_double_pulse();
+}
 
 static void battery_callback(BatteryChargeState state) {
   // Record the new battery level
   battery_level = state.charge_percent;
 }
-
-#define FOREGROUND \
-  settings.inverted ? GColorBlack : GColorWhite
-
-#define BACKGROUND \
-  settings.inverted ? GColorWhite : GColorBlack
 
 static void tick_handler(struct tm *tick_time, TimeUnits units_changed)
 {
@@ -107,8 +198,11 @@ void inner_clock_text_layer_update_callback(Layer *me, GContext *ctx)
   graphics_draw_line(ctx, center, GPoint(minute_x, minute_y));
   graphics_context_set_stroke_width(ctx, 6);
   graphics_draw_line(ctx, center, GPoint(hour_x, hour_y));
-  graphics_context_set_stroke_width(ctx, 2);
-  graphics_draw_line(ctx, center, GPoint(second_x, second_y));
+  if (settings.show_seconds)
+    {
+      graphics_context_set_stroke_width(ctx, 2);
+      graphics_draw_line(ctx, center, GPoint(second_x, second_y));
+    }
 
   graphics_context_set_antialiased(ctx, false);
 
@@ -145,25 +239,35 @@ void inner_clock_text_layer_update_callback(Layer *me, GContext *ctx)
                          GRect(minute_a_x - 9, minute_a_y - 9, 18, 18),
                          GTextOverflowModeFill, GTextAlignmentCenter, 0);
 
-      length = 44;//min(bounds.size.w, bounds.size.h)/2 - 14;
-      int32_t second_a_y = (-cos_lookup(second_angle) * length / TRIG_MAX_RATIO) + center.y;
-      int32_t second_a_x = (sin_lookup(second_angle) * length / TRIG_MAX_RATIO) + center.x;
+      if (settings.show_seconds)
+        {
+          length = 44;//min(bounds.size.w, bounds.size.h)/2 - 14;
+          int32_t second_a_y = (-cos_lookup(second_angle) * length / TRIG_MAX_RATIO) + center.y;
+          int32_t second_a_x = (sin_lookup(second_angle) * length / TRIG_MAX_RATIO) + center.x;
 
-      graphics_context_set_stroke_width(ctx, 1);
-      graphics_draw_circle(ctx, GPoint(second_a_x, second_a_y), 8);
-      graphics_context_set_fill_color(ctx, BACKGROUND);
-      graphics_fill_circle(ctx, GPoint(second_a_x, second_a_y), 7);
+          graphics_context_set_stroke_width(ctx, 1);
+          graphics_draw_circle(ctx, GPoint(second_a_x, second_a_y), 8);
+          graphics_context_set_fill_color(ctx, BACKGROUND);
+          graphics_fill_circle(ctx, GPoint(second_a_x, second_a_y), 7);
 
-      snprintf(buf, 3, "%0d", second);
-      buf[2] = '\0';
-      graphics_draw_text(ctx,
-                         buf,
-                         fonts_get_system_font(FONT_KEY_GOTHIC_14),
-                         GRect(second_a_x - 9, second_a_y - 9, 18, 18),
-                         GTextOverflowModeFill, GTextAlignmentCenter, 0);
+          snprintf(buf, 3, "%0d", second);
+          buf[2] = '\0';
+          graphics_draw_text(ctx,
+                             buf,
+                             fonts_get_system_font(FONT_KEY_GOTHIC_14),
+                             GRect(second_a_x - 9, second_a_y - 9, 18, 18),
+                             GTextOverflowModeFill, GTextAlignmentCenter, 0);
+        }
     }
+
+  if (!bluetooth_connected)
+    draw_bluetooth(ctx, GRect(2, 2, 12, 12));
+
+  if (battery_level < 40) // only show battery symbol when battery level below 30%
+    draw_battery(ctx, GRect(bounds.size.w - 23, 0, 23, 10));
+
 #if defined(PBL_HEALTH)
-  if (heart_rate != -1)
+  if (heart_rate > 0)
     {
       graphics_context_set_text_color(ctx, BACKGROUND);
       char buf[10];
@@ -230,11 +334,9 @@ void clock_layer_update_callback(Layer *me, GContext *ctx)
 #if defined(PBL_HEALTH)
 static void health_handler(HealthEventType type, void *context)
 {
-  APP_LOG(APP_LOG_LEVEL_ERROR, "health_handler");
   if (type == HealthEventHeartRateUpdate || type == HealthEventSignificantUpdate)
     heart_rate = health_service_peek_current_value(HealthMetricHeartRateBPM);
 
-  APP_LOG(APP_LOG_LEVEL_ERROR, "heart_rate = %d, type = %x", (int)heart_rate, type);
   // update display when next timer event hits
 }
 #endif
@@ -269,6 +371,7 @@ static void prv_window_load(Window *window)
   layer_add_child(clock_layer, text_layer_get_layer(inner_clock_text_layer));
   layer_set_update_proc(text_layer_get_layer(inner_clock_text_layer), inner_clock_text_layer_update_callback);
 
+
   time_t timeNow = time(NULL);
   struct tm *pLocalTime = localtime(&timeNow); // returns a pointer to static
                                                // data. cannot free
@@ -277,20 +380,32 @@ static void prv_window_load(Window *window)
   tick_handler(pLocalTime, MINUTE_UNIT);
 
   // register for timer events
-  tick_timer_service_subscribe(SECOND_UNIT, tick_handler);
+  tick_timer_service_subscribe(settings.show_seconds ? SECOND_UNIT : MINUTE_UNIT, tick_handler);
 
-  // also bet battery events
+  // also get battery events
   battery_state_service_subscribe(battery_callback);
+
+  // get initial battery state
+  battery_callback(battery_state_service_peek());
+
+  // tell me about the bluetooth connection
+  connection_service_subscribe((ConnectionHandlers)
+                               {
+                                 .pebble_app_connection_handler = bluetooth_callback
+                               });
+
+  // give initial reading of bluetooth state
+  bluetooth_connected = connection_service_peek_pebble_app_connection();
 
   // heart rate is only available if pebble health is available
   // don't include this code for other platforms
 #if defined(PBL_HEALTH)
-  if (!health_service_events_subscribe(health_handler, NULL))
-    APP_LOG(APP_LOG_LEVEL_ERROR, "subscribing health handler did not work");
+  health_service_events_subscribe(health_handler, NULL);
 #endif
 }
 
-static void prv_window_unload(Window *window) {
+static void prv_window_unload(Window *window)
+{
   text_layer_destroy(digital_layer_text_layer);
   layer_destroy(text_layer_get_layer(inner_clock_text_layer));
   layer_destroy(clock_layer);
@@ -299,8 +414,11 @@ static void prv_window_unload(Window *window) {
 
 static void load_settings()
 {
-  settings.inverted = false;
+  settings.show_seconds = true;
+  settings.foreground_color = GColorWhite;
+  settings.background_color = GColorBlack;
   settings.show_bubbles = true;
+  settings.vibrate_on_disconnect = false;
   persist_read_data(SETTINGS_KEY, &settings, sizeof(settings));
 }
 
@@ -309,17 +427,33 @@ static void save_settings()
   persist_write_data(SETTINGS_KEY, &settings, sizeof(settings));
   layer_mark_dirty(clock_layer);
   layer_mark_dirty(text_layer_get_layer(inner_clock_text_layer));
+
+  tick_timer_service_unsubscribe();
+  // register for timer events
+  tick_timer_service_subscribe(settings.show_seconds ? SECOND_UNIT : MINUTE_UNIT, tick_handler);
 }
 
 static void app_message_received(DictionaryIterator *it, void *context)
 {
-  Tuple *t = dict_find(it, MESSAGE_KEY_ConfigInverted);
+  Tuple *t = dict_find(it, MESSAGE_KEY_ConfigShowSeconds);
   if (t)
-    settings.inverted = t->value->int32 == 1;
+    settings.show_seconds = t->value->int32 == 1;
+
+  t = dict_find(it, MESSAGE_KEY_ConfigForegroundColor);
+  if (t)
+    settings.foreground_color = GColorFromHEX(t->value->int32);
+
+  t = dict_find(it, MESSAGE_KEY_ConfigBackgroundColor);
+  if (t)
+    settings.background_color = GColorFromHEX(t->value->int32);
 
   t = dict_find(it, MESSAGE_KEY_ConfigShowBubbles);
   if (t)
     settings.show_bubbles = t->value->int32 == 1;
+
+  t = dict_find(it, MESSAGE_KEY_ConfigVibrateOnBluetoothDisconnect);
+  if (t)
+    settings.vibrate_on_disconnect = t->value->int32 == 1;
 
   save_settings();
 }
