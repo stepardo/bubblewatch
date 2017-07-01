@@ -20,6 +20,8 @@ static unsigned hour = 0, minute = 0, second = 0;
 static char digital_layer_text_buffer[22];
 static short initialized = 0;
 static int battery_level = 0;
+static HealthValue heart_rate = -1;
+
 
 static void battery_callback(BatteryChargeState state) {
   // Record the new battery level
@@ -82,6 +84,7 @@ void inner_clock_text_layer_update_callback(Layer *me, GContext *ctx)
   GPoint center = grect_center_point(&bounds);
 
   graphics_context_set_text_color(ctx, FOREGROUND);
+  graphics_context_set_antialiased(ctx, true);
 
 #define min(a, b) ( a < b ? a : b )
 
@@ -105,6 +108,8 @@ void inner_clock_text_layer_update_callback(Layer *me, GContext *ctx)
   graphics_draw_line(ctx, center, GPoint(hour_x, hour_y));
   graphics_context_set_stroke_width(ctx, 2);
   graphics_draw_line(ctx, center, GPoint(second_x, second_y));
+
+  graphics_context_set_antialiased(ctx, false);
 
   graphics_context_set_stroke_width(ctx, 1);
   graphics_draw_circle(ctx, center, 8);
@@ -152,6 +157,44 @@ void inner_clock_text_layer_update_callback(Layer *me, GContext *ctx)
                      fonts_get_system_font(FONT_KEY_GOTHIC_14),
                      GRect(second_a_x - 9, second_a_y - 9, 18, 18),
                      GTextOverflowModeFill, GTextAlignmentCenter, 0);
+
+#if defined(PBL_HEALTH)
+  if (heart_rate != -1)
+    {
+      graphics_context_set_text_color(ctx, BACKGROUND);
+      char buf[10];
+      snprintf(buf, 10, "BPM: %d", (int)heart_rate);
+#define X 2
+#define Y bounds.size.h - 16
+#define W bounds.size.w
+#define H bounds.size.h
+      graphics_draw_text(ctx, buf,
+                         fonts_get_system_font(FONT_KEY_GOTHIC_14),
+                         GRect(X - 1, Y - 1, W, H),
+                         GTextOverflowModeFill, GTextAlignmentLeft, 0);
+      graphics_draw_text(ctx, buf,
+                         fonts_get_system_font(FONT_KEY_GOTHIC_14),
+                         GRect(X + 1, Y - 1, W, H),
+                         GTextOverflowModeFill, GTextAlignmentLeft, 0);
+      graphics_draw_text(ctx, buf,
+                         fonts_get_system_font(FONT_KEY_GOTHIC_14),
+                         GRect(X - 1, Y + 1, W, H),
+                         GTextOverflowModeFill, GTextAlignmentLeft, 0);
+      graphics_draw_text(ctx, buf,
+                         fonts_get_system_font(FONT_KEY_GOTHIC_14),
+                         GRect(X + 1, Y + 1, W, H),
+                         GTextOverflowModeFill, GTextAlignmentLeft, 0);
+      graphics_context_set_text_color(ctx, FOREGROUND);
+      graphics_draw_text(ctx, buf,
+                         fonts_get_system_font(FONT_KEY_GOTHIC_14),
+                         GRect(X, Y, W, H),
+                         GTextOverflowModeFill, GTextAlignmentLeft, 0);
+#undef X
+#undef Y
+#undef W
+#undef H
+    }
+#endif
 }
 
 void clock_layer_update_callback(Layer *me, GContext *ctx)
@@ -180,7 +223,20 @@ void clock_layer_update_callback(Layer *me, GContext *ctx)
   graphics_draw_line(ctx, GPoint(bounds.size.w - LENGTH, bounds.size.h/2), GPoint(bounds.size.w, bounds.size.h/2));
 }
 
-static void prv_window_load(Window *window) {
+#if defined(PBL_HEALTH)
+static void health_handler(HealthEventType type, void *context)
+{
+  APP_LOG(APP_LOG_LEVEL_ERROR, "health_handler");
+  if (type == HealthEventHeartRateUpdate || type == HealthEventSignificantUpdate)
+    heart_rate = health_service_peek_current_value(HealthMetricHeartRateBPM);
+
+  APP_LOG(APP_LOG_LEVEL_ERROR, "heart_rate = %d, type = %x", (int)heart_rate, type);
+  // update display when next timer event hits
+}
+#endif
+
+static void prv_window_load(Window *window)
+{
   Layer *window_layer = window_get_root_layer(window);
   GRect bounds = layer_get_bounds(window_layer);
 
@@ -213,11 +269,21 @@ static void prv_window_load(Window *window) {
   struct tm *pLocalTime = localtime(&timeNow); // returns a pointer to static
                                                // data. cannot free
 
+  // init time once on startup, don't wait for event
   tick_handler(pLocalTime, MINUTE_UNIT);
 
+  // register for timer events
   tick_timer_service_subscribe(SECOND_UNIT, tick_handler);
 
+  // also bet battery events
   battery_state_service_subscribe(battery_callback);
+
+  // heart rate is only available if pebble health is available
+  // don't include this code for other platforms
+#if defined(PBL_HEALTH)
+  if (!health_service_events_subscribe(health_handler, NULL))
+    APP_LOG(APP_LOG_LEVEL_ERROR, "subscribing health handler did not work");
+#endif
 }
 
 static void prv_window_unload(Window *window) {

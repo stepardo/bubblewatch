@@ -18,7 +18,8 @@
     "projectType": "native",
     "uuid": "f613cbb0-4626-44e7-92d3-cc1a0c67051e",
     "capabilities": [
-      "configurable"
+        "configurable",
+        "health"
     ],
     "messageKeys": [
       "ConfigInverted"
@@ -31,7 +32,7 @@
     "targetPlatforms": [
       "aplite",
       "basalt",
-      "chalk"
+      "diorite"
     ]
   },
   "name": "Planetary Clock"
