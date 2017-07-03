@@ -138,7 +138,14 @@ static void tick_handler(struct tm *tick_time, TimeUnits units_changed)
   layer_mark_dirty(text_layer_get_layer(inner_clock_text_layer));
   if (!initialized || second == 0)
     {
-      strftime(digital_layer_text_buffer, sizeof(digital_layer_text_buffer), "%H:%M  %d.%m.%Y", tick_time);
+      if (clock_is_24h_style())
+        {
+          strftime(digital_layer_text_buffer, sizeof(digital_layer_text_buffer), "%H:%M  %d.%m.%Y", tick_time);
+        }
+      else
+        {
+          strftime(digital_layer_text_buffer, sizeof(digital_layer_text_buffer), "%I:%M %p %D", tick_time);
+        }
       text_layer_set_text(digital_layer_text_layer, digital_layer_text_buffer);
       initialized = 1;
     }
